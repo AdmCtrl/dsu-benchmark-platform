@@ -1,0 +1,50 @@
+﻿server:
+  port: 8081
+  shutdown: graceful
+
+spring:
+  application:
+    name: orchestrator-service
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 250MB
+      max-request-size: 250MB
+      file-size-threshold: 2KB
+  
+  kafka:
+    bootstrap-servers: localhost:9092
+  
+  datasource:
+    url: jdbc:postgresql://localhost:5433/dsudb
+    username: dsuadmin
+    password: SimplePass123
+
+  
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+  redis:
+    host: dsu-redis
+    port: 6379
+    password: redispass123
+    timeout: 2000ms
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.dsu: DEBUG
+    org.springframework: INFO
+    org.springframework.boot.context.config: DEBUG
+
+dsu:
+  jar: C:/JAVA/Adm/dsu-benchmark-platform/services/orchestrator-service/groupmerger-1.0.jar

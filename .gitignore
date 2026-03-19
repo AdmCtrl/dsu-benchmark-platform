@@ -1,0 +1,30 @@
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# Node / Angular (Frontend)
+node_modules/
+dist/
+.angular/
+
+# Spring Boot / Gradle / Maven (Backend)
+target/
+build/
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+env/
+
+# Docker / DB Data / Тяжелые файлы
+dsu-postgres-data/
+dsu-kafka-data/
+dsu-prometheus-data/
+dsu-grafana-data/
+works/
+sql/
+*.csv
+*.txt

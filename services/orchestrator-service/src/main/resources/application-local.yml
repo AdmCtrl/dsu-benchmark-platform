@@ -1,0 +1,31 @@
+spring:
+  config:
+    activate:
+      on-profile: local
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 250MB
+      max-request-size: 250MB
+      file-size-threshold: 2KB
+
+  datasource:
+    url: jdbc:postgresql://localhost:5435/dsudb
+    username: dsuadmin
+    password: SimplePass123
+
+
+  kafka:
+    bootstrap-servers: localhost:9093
+
+  redis:
+    host: localhost
+    port: 6379
+    password: redispass123
+
+server:
+  port: 8081
+
+dsu:
+  jar: C:/JAVA/Adm/dsu-benchmark-platform/services/orchestrator-service/groupmerger-1.0.jar
+

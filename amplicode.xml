@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AmplicodePersistenceUnitSettings">
+    <persistence-units>
+      <persistence-unit moduleName="dsu-benchmark-platform.services.orchestrator-service.main" name="Default">
+        <packages>
+          <package value="com.dsu.orchestrator" />
+        </packages>
+      </persistence-unit>
+    </persistence-units>
+  </component>
+</project>

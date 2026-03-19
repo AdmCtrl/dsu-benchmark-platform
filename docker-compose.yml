@@ -1,0 +1,181 @@
+version: '3.8'
+
+# Сеть для изоляции нашего проекта
+networks:
+  dsu-network:
+    driver: bridge
+    name: dsu-network
+
+# Volume'ы для сохранения данных
+volumes:
+  dsu-postgres-data:
+    name: dsu-postgres-data
+  dsu-kafka-data:
+    name: dsu-kafka-data
+  dsu-prometheus-data:
+    name: dsu-prometheus-data
+  dsu-grafana-data:
+    name: dsu-grafana-data
+
+services:
+  # PostgreSQL с уникальными настройками
+  postgres:
+    image: postgres:15
+    container_name: dsu-postgres
+    hostname: dsu-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dsudb
+      POSTGRES_USER: dsuadmin
+      POSTGRES_PASSWORD: SimplePass123
+    ports:
+      - "5435:5432"
+    volumes:
+      - dsu-postgres-data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - dsu-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dsuadmin -d dsudb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Kafka кластер
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: dsu-zookeeper
+    hostname: dsu-zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_SYNC_LIMIT: 2
+    ports:
+      - "2182:2181"  # 2182 наружу
+    volumes:
+      - ./docker/kafka/zookeeper.properties:/etc/kafka/zookeeper.properties
+    networks:
+      - dsu-network
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo stat | nc localhost 2181"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: dsu-kafka
+    hostname: dsu-kafka
+    restart: unless-stopped
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: dsu-zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://dsu-kafka:9092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_MESSAGE_MAX_BYTES: 52428800  # 50MB
+      KAFKA_REPLICA_FETCH_MAX_BYTES: 52428800
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+    ports:
+      - "9093:9092"  # 9093 наружу
+      - "9094:9094"  # JMX порт
+    volumes:
+      - dsu-kafka-data:/var/lib/kafka/data
+      - ./docker/kafka/server.properties:/etc/kafka/server.properties
+    networks:
+      - dsu-network
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis для кэша и rate limiting
+  redis:
+    image: redis:7-alpine
+    container_name: dsu-redis
+    hostname: dsu-redis
+    restart: unless-stopped
+    command: >
+      redis-server 
+      --appendonly yes 
+      --maxmemory 512mb 
+      --maxmemory-policy allkeys-lru
+      --requirepass redispass123
+    ports:
+      - "6379:6379"
+    # volumes:
+    #  - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf
+    networks:
+      - dsu-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redispass123", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Мониторинг
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: dsu-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - dsu-prometheus-data:/prometheus
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - dsu-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: dsu-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-piechart-panel,grafana-clock-panel
+      GF_LOG_LEVEL: info
+    volumes:
+      - dsu-grafana-data:/var/lib/grafana
+      - ./monitoring/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - dsu-network
+    depends_on:
+      - prometheus
+
+  # Kafka UI для удобства
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: dsu-kafka-ui
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: dsu-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: dsu-kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: dsu-zookeeper:2181
+      DYNAMIC_CONFIG_ENABLED: "true"
+    networks:
+      - dsu-network
+    depends_on:
+      - kafka
