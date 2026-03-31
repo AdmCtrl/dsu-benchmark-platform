@@ -10,6 +10,7 @@ public class Job {
     private final Path workDir;
     private final String inputFileName;
     private final String outputFileName;
+    private AlgorithmType algorithmType = AlgorithmType.JAVA_JAR;
 
     // mutable state
     private volatile JobStatus status;
@@ -17,6 +18,7 @@ public class Job {
     private volatile Instant startedAt;
     private volatile Instant finishedAt;
     private volatile String errorMessage;
+    private transient Process currentProcess;
 
     public Job(String id, Path workDir, String inputFileName, String outputFileName) {
         this.id = Objects.requireNonNull(id, "id");
@@ -64,6 +66,14 @@ public class Job {
         return errorMessage;
     }
 
+    public AlgorithmType getAlgorithmType() {
+        return algorithmType;
+    }
+
+    public void setAlgorithmType(AlgorithmType algorithmType) {
+        this.algorithmType = algorithmType;
+    }
+
     // --- setters / state changes ---
     // use synchronized where multiple fields are changed together
     public synchronized void setStatus(JobStatus status) {
@@ -84,6 +94,14 @@ public class Job {
 
     public synchronized void setErrorMessage(String errorMessage) {
         this.errorMessage = errorMessage;
+    }
+
+    public Process getCurrentProcess() {
+        return currentProcess;
+    }
+
+    public void setCurrentProcess(Process currentProcess) {
+        this.currentProcess = currentProcess;
     }
 
     // convenience: set status + started timestamp

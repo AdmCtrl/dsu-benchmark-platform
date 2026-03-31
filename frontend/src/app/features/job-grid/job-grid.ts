@@ -1,4 +1,3 @@
-// src/app/features/jobs/components/job-grid/job-grid.ts
 import {Component, OnInit, OnDestroy} from '@angular/core';
 import {CommonModule} from '@angular/common';
 import {JobStore} from '../../core/state/job.store';
@@ -8,107 +7,237 @@ import {Observable} from 'rxjs';
 import {JobLogComponent} from '../job-grid/job-log';
 import {JobEventsService} from '../../core/services/job-events.service';
 import {JobEventsFacade} from '../../core/state/job-events.facade';
+import {AnimatedCellComponent} from './animated-cell.component';
+import {UiStateService} from '../../core/state/ui-state.service';
+import {delay, filter, finalize, switchMap, takeUntil, tap} from 'rxjs';
 
 @Component({
   selector: 'app-job-grid',
   standalone: true,
-  imports: [CommonModule, JobLogComponent],
+  imports: [CommonModule, JobLogComponent, AnimatedCellComponent],
   template: `
-    <h2>Jobs ({{ totalRunningTasks$ | async }} running)</h2>
-    <table *ngIf="jobs$ | async as jobs" class="job-table">
-      <thead>
-      <tr>
-        <th>ID</th>
-        <th>Input File</th>
-        <th>Status</th>
-        <th>Created</th>
-        <th>Started</th>
-        <th>Finished</th>
-        <th>Error</th>
-        <th>Actions</th>
-      </tr>
-      </thead>
-      <tbody>
-      <tr *ngFor="let job of jobs; trackBy: trackByJobId">
-        <td>{{ job.id }}</td>
-        <td>{{ job.inputFileName }}</td>
-        <td>{{ job.status }}</td>
-        <td>{{ job.createdDate | date:'short' }}</td>
-        <td>{{ job.startedAt ? (job.startedAt | date:'HH:mm:ss') : '-' }}</td>
-        <td>{{ job.finishedAt ? (job.finishedAt | date:'HH:mm:ss') : '-' }}</td>
-        <td style="color:red">{{ job.errorMessage || '' }}</td>
-        <td>
-          <button (click)="run(job)" [disabled]="!facade.canRun(job.id)">
-            Run ({{ facade.getRunningCount(job.id) }})
-          </button>
-          <button
-            (click)="download(job)"
-            [disabled]="job.status === 'RUNNING'">
-            Get Output
-          </button>
-          <button (click)="toggleLog(job)">Log</button>
-          <button
-            (click)="delete(job)"
-            [disabled]="job.status === 'RUNNING'">
-            Delete
-          </button>
-          <app-job-log *ngIf="isLogOpen(job)" [jobId]="job.id"></app-job-log>
-        </td>
-      </tr>
-      </tbody>
-    </table>
+    <h2>Jobs (<span style="color: var(--accent-blue)">{{ totalRunningTasks$ | async }}</span> running)</h2>
+    
+    <div class="job-container">
+      
+      <div class="table-scroll-wrapper" *ngIf="(jobs$ | async)?.length; else emptyState">
+        <table class="job-table">
+          <thead>
+          <tr>
+          <th class="col-id">ID</th>
+          <th class="col-file">Input File</th>
+          <th class="col-status">Status</th>
+          <th class="col-date">Created</th>
+          <th class="col-date">Started</th>
+          <th class="col-date">Finished</th>
+          <th class="col-error">Error</th>
+          <th class="col-actions">Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr *ngFor="let job of jobs$ | async; trackBy: trackByJobId">
+          <td>{{ job.id }}</td>
+          <td style="color: var(--text-secondary)">{{ job.inputFileName }}</td>
+          <td>
+            <span class="status-badge" [ngClass]="job.status.toLowerCase()">
+              <app-animated-cell [value]="job.status"></app-animated-cell>
+            </span>
+          </td>
+          <td>{{ job.createdDate | date:'HH:mm:ss' }}</td>
+          <td><app-animated-cell [value]="job.startedAt ? (job.startedAt | date:'HH:mm:ss') : '-'"></app-animated-cell></td>
+          <td><app-animated-cell [value]="job.finishedAt ? (job.finishedAt | date:'HH:mm:ss') : '-'"></app-animated-cell></td>
+          <td>
+            <span class="error-text">
+              <app-animated-cell [value]="job.errorMessage || ''"></app-animated-cell>
+            </span>
+          </td>
+          <td>
+            <button (click)="run(job)" 
+                    class="action-btn run-btn"
+                    [disabled]="!facade.canRun(job.id)">
+              Run ({{ facade.getRunningCount(job.id) }})
+            </button>
+            
+            <button (click)="toggleLog(job)" class="action-btn">Log</button>
+
+            <button (click)="download(job)"
+                    class="action-btn"
+                    [disabled]="job.status === 'RUNNING' || !job.outputFileName">
+              Output
+            </button>
+            
+            <button (click)="delete(job)"
+                    class="action-btn"
+                    style="color: var(--accent-red); border-color: rgba(239, 68, 68, 0.2)"
+                    [disabled]="job.status === 'RUNNING'">
+              Delete
+            </button>
+            
+            <app-job-log *ngIf="isLogOpen(job)" [jobId]="job.id"></app-job-log>
+          </td>
+        </tr>
+        </tbody>
+        </table>
+      </div>
+
+      <ng-template #emptyState>
+        <div class="empty-state">
+          <div class="icon">📁</div>
+          <p>Ожидаю данные для анализа...</p>
+          <span>Загрузите CSV файл в верхней панели, чтобы начать работу.</span>
+        </div>
+      </ng-template>
+
+    </div>
   `,
   styles: [`
+    :host {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+    h2 {
+      flex-shrink: 0;
+      margin-top: 0;
+    }
+
+    .job-container {
+      width: 100%;
+      flex: 1; /* ГЛАВНОЕ: занимает все доступное место */
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      box-sizing: border-box;
+      background: var(--bg-card);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: 20px;
+      border: 1px solid var(--glass-border);
+      padding: 24px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+    }
+
+    .table-scroll-wrapper {
+      flex: 1; /* Занимает остаток внутри контейнера */
+      min-height: 0; /* позволяет скроллиться внутри себя */
+      overflow-y: auto;
+      /* Тонкий скроллбар */
+      scrollbar-width: thin;
+      scrollbar-color: #475569 transparent;
+    }
+    .table-scroll-wrapper::-webkit-scrollbar {
+      width: 8px;
+    }
+    .table-scroll-wrapper::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .table-scroll-wrapper::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 4px;
+    }
+
     .job-table {
       width: 100%;
-      border-collapse: collapse;
-      margin-top: 10px;
-      table-layout: auto;
+      border-collapse: collapse; /* Убираем промежутки между строками */
+      table-layout: fixed;
     }
 
-    .job-table th, .job-table td {
-      border: 1px solid #ccc;
-      padding: 4px 8px;
-      text-align: left;
-    }
-
-    .job-table th:nth-child(1), .job-table td:nth-child(1),
-    .job-table th:nth-child(3), .job-table td:nth-child(3),
-    .job-table th:nth-child(4), .job-table td:nth-child(4),
-    .job-table th:nth-child(5), .job-table td:nth-child(5),
-    .job-table th:nth-child(6), .job-table td:nth-child(6) {
-      white-space: nowrap;
-      width: 0%;
-    }
-
-    .job-table th:nth-child(2), .job-table td:nth-child(2) {
-      white-space: nowrap;
-      width: 7%;
-      min-width: 130px;
-    }
-
-    .job-table th:nth-child(7), .job-table td:nth-child(7) {
-      white-space: nowrap;
-      width: 10%;
-    }
-
-    .job-table th:nth-child(8), .job-table td:nth-child(8) {
-      width: auto;
-      min-width: 230px;
-    }
+    /* Настройка ширин колонок для стабильности */
+    .col-id { width: 80px; text-align: center; }
+    .col-file { width: 180px; }
+    .col-status { width: 140px; text-align: center; }
+    .col-date { width: 130px; text-align: center; }
+    .col-error { width: auto; min-width: 180px; } 
+    .col-actions { width: 370px; }
 
     .job-table th {
-      background: #d7e2f1;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: #1e293b; /* Непрозрачный фон шапки, чтобы не просвечивал контент при скролле */
+      padding: 12px 10px;
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      border-bottom: 2px solid var(--glass-border);
+      border-right: 1px solid rgba(255, 255, 255, 0.15); /* Явный разделитель */
     }
 
-    button {
-      margin-right: 4px;
+    .job-table th:last-child { border-right: none; }
+
+    /* Выравнивание заголовков согласно контенту */
+    .job-table th.col-id, 
+    .job-table th.col-status, 
+    .job-table th.col-date { text-align: center; }
+
+    .job-table td {
+      padding: 14px 16px;
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--glass-border);
+      border-right: 1px solid var(--glass-border); /* Разделитель в теле */
+      font-size: 14px;
+      vertical-align: middle;
     }
 
-    button[disabled] {
-      opacity: 0.5;
-      cursor: not-allowed;
+    .job-table td:last-child { border-right: none; }
+
+    .job-table tr:hover td {
+      background: rgba(255, 255, 255, 0.05);
     }
+
+    .status-badge {
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .action-btn {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-primary);
+      border: 1px solid var(--glass-border);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      margin-right: 6px;
+    }
+
+    .action-btn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+    }
+
+    .run-btn {
+      background: rgba(59, 130, 246, 0.1);
+      color: var(--accent-blue);
+      border-color: rgba(59, 130, 246, 0.3);
+    }
+    
+    .run-btn:hover:not(:disabled) {
+      background: var(--accent-blue);
+      color: white;
+    }
+
+    .error-text {
+      color: var(--accent-red);
+      font-size: 12px;
+      opacity: 0.9;
+    }
+
+    .empty-state {
+      padding: 60px;
+      text-align: center;
+      color: var(--text-secondary);
+    }
+
+    .empty-state .icon { font-size: 64px; margin-bottom: 20px; opacity: 0.5; }
+    .empty-state p { font-size: 20px; color: var(--text-primary); margin: 0; }
   `]
 })
 export class JobGridComponent implements OnInit, OnDestroy {
@@ -120,7 +249,8 @@ export class JobGridComponent implements OnInit, OnDestroy {
     private jobStore: JobStore,
     private jobService: JobService,
     private jobEvents: JobEventsService,
-    public facade: JobEventsFacade
+    public facade: JobEventsFacade,
+    public uiState: UiStateService
   ) {}
 
   ngOnInit(): void {
@@ -128,16 +258,45 @@ export class JobGridComponent implements OnInit, OnDestroy {
     this.totalRunningTasks$ = this.facade.totalRunningTasks$;
     this.jobEvents.connect();
     this.facade.init();
+    
+    // Авто-синхронизация при старте
+    this.repair();
+  }
 
+  repair() {
+    this.uiState.run('Синхронизация списка Jobs', 
+      this.jobService.repair()
+    ).subscribe(jobs => {
+      this.jobStore.setAll(jobs);
+    });
   }
 
   run(job: Job): void {
-    this.facade.startJob(job.id);
-    this.jobService.run(job.id).subscribe();
+    let currentMsgId: number;
+
+    const task$ = this.jobService.run(job.id).pipe(
+      tap(res => {
+        this.facade.startJob(job.id);
+        if (currentMsgId) {
+          this.facade.getExecutionLogs(res.executionId).pipe(
+            takeUntil(this.facade.waitForExecution(job.id, res.executionId))
+          ).subscribe(line => {
+            this.uiState.updateMessage(currentMsgId, `Job ${job.id}: ${line}`);
+          });
+        }
+      }),
+      switchMap(res => this.facade.waitForExecution(job.id, res.executionId).pipe(delay(1500)))
+    );
+
+    this.uiState.run(`Фоновое выполнение Job ${job.id}`, task$, ctx => currentMsgId = ctx.id, {blocking: false}).subscribe();
   }
 
   delete(job: Job): void {
-    this.jobService.delete(job.id).subscribe();
+    this.uiState.run(`Удаление Job ${job.id}`, 
+      this.jobService.delete(job.id).pipe(
+        tap(() => this.jobStore.remove(job.id))
+      )
+    ).subscribe();
   }
 
   toggleLog(job: Job) : void {

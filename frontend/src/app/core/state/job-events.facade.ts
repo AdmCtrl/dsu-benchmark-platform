@@ -3,7 +3,7 @@ import {JobEventsService} from '../services/job-events.service';
 import {JobStore} from './job.store';
 import {JobLogStore} from './job-log.store';
 import {JobEvent} from '../models/job-event';
-import {Observable, Subscription} from 'rxjs';
+import {filter, first, map, Observable, Subscription, tap} from 'rxjs';
 import {Job} from '../models/job';
 import {TaskStore} from './task.store';
 
@@ -12,6 +12,28 @@ export class JobEventsFacade {
   private sub?: Subscription;
 
   readonly totalRunningTasks$: Observable<number>;
+
+  waitForExecution(jobId: string, executionId: string): Observable<void> {
+    return this.events.events$.pipe(
+      // Ищем событие обновления этого джоба с нужным executionId
+      filter(e => e.type === 'UPDATED' && e.jobId === jobId && e.executionId === executionId),
+      // Ждем, пока статус в пейлоаде не станет финальным
+      filter(e => e.payload?.status === 'FINISHED' || e.payload?.status === 'FAILED'),
+      // Нам нужно только ПЕРВОЕ такое событие
+      first(),
+      // Превращаем в void, так как нам важен только факт завершения (complete)
+      map(() => void 0)
+    );
+  }
+
+  /** Стрим живых логов для отображения в уведомлении */
+  getExecutionLogs(executionId: string): Observable<string> {
+    return this.events.events$.pipe(
+      filter(e => e.type === 'LOG' && e.executionId === executionId),
+      map(e => e.message || ''),
+      filter(msg => !!msg)
+    );
+  }
 
 
   constructor(
@@ -42,7 +64,7 @@ export class JobEventsFacade {
 
       case 'CREATED':
       case 'UPDATED':
-        this.applyServerJob(e.payload!);
+        this.applyServerJob(e);
         break;
 
       case 'DELETED':
@@ -51,7 +73,7 @@ export class JobEventsFacade {
 
       case 'LOG':
         if (e.message) {
-          this.logStore.append(e.jobId, e.message);
+          this.logStore.append(e.jobId, e.executionId, e.message);
         }
         break;
     }
@@ -87,11 +109,16 @@ export class JobEventsFacade {
     return true; // или логика лимитов
   }
 
-  private applyServerJob(serverJob: Job) {
+  private applyServerJob(e: JobEvent) {
+    const serverJob = e.payload!;
     const jobId = serverJob.id;
 
-    if (serverJob.status === 'FINISHED' || serverJob.status === 'ERROR') {
+    if (serverJob.status === 'FINISHED' || serverJob.status === 'FAILED') {
       this.taskStore.finishOne(jobId);
+      // Сообщаем стору логов, что этот запуск завершился — очередь адвансируется
+      if (e.executionId) {
+        this.logStore.markExecutionFinished(jobId, e.executionId);
+      }
     }
 
     const active = this.taskStore.runningCountForJob(jobId);

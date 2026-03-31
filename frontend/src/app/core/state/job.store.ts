@@ -5,6 +5,7 @@ import {Job} from '../models/job';
 @Injectable({providedIn: 'root'})
 export class JobStore {
   remove(id: string) {
+    console.log('Store: Removing job', id);
     this._jobs.next(
       this._jobs.value.filter(j => j.id !== id)
     );
@@ -20,8 +21,7 @@ export class JobStore {
   update(job: Job) {
     const updated = this._jobs.value.map(j => {
       if (j.id === job.id) {
-        Object.assign(j, job); // мутируем существующий
-        return j;
+        return new Job({...j, ...job}); // Новая ссылка!
       }
       return j;
     });

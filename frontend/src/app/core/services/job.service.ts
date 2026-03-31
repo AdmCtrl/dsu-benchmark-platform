@@ -1,5 +1,5 @@
 import {Injectable} from '@angular/core';
-import {HttpClient} from '@angular/common/http';
+import {HttpClient, HttpEvent, HttpEventType} from '@angular/common/http';
 import {map, Observable} from 'rxjs';
 import {Job} from '../models/job';
 
@@ -23,12 +23,13 @@ export class JobService {
 
   constructor(private http: HttpClient) { }
 
-  createJob(file: File): Observable<Job> {
+  createJob(file: File): Observable<HttpEvent<JobDto>> {
     const fd = new FormData();
     fd.append('file', file);
-    return this.http.post(this.base, fd).pipe(
-      map(dto => new Job(dto))
-    );
+    return this.http.post<JobDto>(this.base, fd, {
+      reportProgress: true,
+      observe: 'events'
+    });
   }
 
   list(): Observable<Job[]> {
@@ -43,8 +44,8 @@ export class JobService {
     );
   }
 
-  run(id: string, body: Record<string, unknown> = {}): Observable<void> {
-    return this.http.post<void>(`${this.base}/${id}/run`, body || {});
+  run(id: string, body: Record<string, unknown> = {}): Observable<{id: string, executionId: string, status: string}> {
+    return this.http.post<{id: string, executionId: string, status: string}>(`${this.base}/${id}/run`, body || {});
   }
 
   delete(id: string): Observable<void> {

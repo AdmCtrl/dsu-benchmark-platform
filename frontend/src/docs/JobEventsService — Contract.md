@@ -18,13 +18,16 @@
 – Управляет соединением с SSE
 – Преобразует raw EventSource → JobEvent
 – Гарантирует delivery в Angular zone
-– Предоставляет read-only Observable<JobEvent>
+– Предоставляет Replay-поток событий `events$`
+– **🆕 Предоставляет актуальный статус соединения `isConnected$`**
+– **🆕 Выполняет Heartbeat-проверки (HEAD /api/jobs) каждые 3с**
 ```
 
 ### Публичный API
 
 ```ts
 events$: Observable<JobEvent>
+isConnected$: Observable<boolean> // True, если бекенд доступен
 
 connect(): void
 disconnect(): void
@@ -44,4 +47,10 @@ disconnect(): void
 
 > `JobEventsService` — низкоуровневый транспортный сервис.
 > Он не содержит бизнес-логики и не взаимодействует со state напрямую.
-> Все подписки и интерпретация событий выполняются в `JobEventsFacade`.
+> Все подписки и интерпретация самих событий выполняются в `JobEventsFacade`.
+
+### Heartbeat Mechanism (Watchdog)
+Так как браузерный `EventSource` плохо детектирует "молчаливые" разрывы связи (например, когда Spring упал, а прокси-сервер все еще держит соединение), в `connect()` запускается **Watchdog**:
+* Интервал: **3000мс**.
+* Метод: **HEAD /api/jobs**.
+* Цель: Мгновенное обновление `isConnected$`, если сервер не ответил или вернул ошибку.

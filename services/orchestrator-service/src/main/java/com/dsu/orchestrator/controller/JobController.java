@@ -42,8 +42,29 @@ public class JobController {
         Object a = body.get("args");
         List<String> args = a instanceof List ? (List<String>) a : null;
         String xmx = body != null && body.containsKey("xmx") ? String.valueOf(body.get("xmx")) : null;
-        service.runJobAsync(id, args, xmx);
-        return ResponseEntity.accepted().body(Map.of("id", id, "status", "RUNNING"));
+        String algo = body != null && body.containsKey("algorithm") ? String.valueOf(body.get("algorithm")) : null;
+        
+        Job job = service.getJob(id);
+        if (job != null && algo != null) {
+            try {
+                job.setAlgorithmType(AlgorithmType.valueOf(algo));
+            } catch (IllegalArgumentException e) {
+                // Ignore unknown algo
+            }
+        }
+        
+        String executionId = service.runJobAsync(id, args, xmx);
+        return ResponseEntity.accepted().body(Map.of(
+            "id", id, 
+            "executionId", executionId, 
+            "status", "RUNNING"
+        ));
+    }
+
+    @PostMapping("/{id}/stop")
+    public ResponseEntity<?> stop(@PathVariable String id) {
+        service.stopJob(id);
+        return ResponseEntity.ok(Map.of("id", id, "status", "STOPPED"));
     }
 
     @DeleteMapping("/{id}")

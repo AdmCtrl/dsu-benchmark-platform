@@ -14,6 +14,27 @@
 
 ---
 
+## Visual & UX Strategy (Premium Layer)
+
+В дополнение к технической архитектуре, проект следует строгим принципам **Premium UX**:
+
+### 1. Glassmorphism & Aesthetics
+* **Фон**: Глубокий темно-синий (`#0f172a`).
+* **Панели**: Полупрозрачные карточки с `backdrop-filter: blur(12px)`.
+* **Границы**: Тонкие светлые обводки (`rgba(255, 255, 255, 0.1)`) для создания эффекта глубины.
+
+### 2. Anti-Jitter (Стабильность верстки)
+Для устранения "прыжков" интерфейса при обновлении данных:
+* **`scrollbar-gutter: stable`**: Резервирует место под скроллбар заранее.
+* **`table-layout: fixed`**: Ширины колонок зафиксированы, таблица не "гуляет" при изменении контента.
+* **Sticky Header**: Заголовки таблиц всегда видны при скролле.
+* **Internal Scrolling**: Скроллится только контент внутри панелей, сама страница остается статичной.
+
+### 3. Real-time Heartbeat
+SSE-мониторинг дополнен активным **Heartbeat** (HEAD-запросы каждые 3с). Это гарантирует, что индикатор "Live Monitoring" мгновенно станет красным, если сервер упадет (даже за прокси), не дожидаясь таймаута TCP.
+
+---
+
 ## Directory Structure
 
 ```text
@@ -35,13 +56,16 @@ src/app
 │       └── job-events.facade.ts
 │
 ├── features
-│   ├── jobs
-│   │   └── components
-│   │       ├── job-grid.component.ts
-│   │       └── job-log.component.ts
+│   ├── job-grid
+│   │   ├── job-grid.ts          (Table, sticky header, internal scroll)
+│   │   ├── job-log.ts           (Log viewer)
+│   │   └── animated-cell.ts     (Pulse & Ghost animations)
 │   │
-│   └── file-uploader
-│       └── file-uploader.component.ts
+│   ├── file-uploader
+│   │   └── file-uploader.ts     (Glassmorphism uploader)
+│   │
+│   └── ui-notifications
+│       └── ui-notifications.ts  (Progress & status alerts)
 ```
 
 ---

@@ -1,4 +1,4 @@
-﻿server:
+server:
   port: 8081
   shutdown: graceful
 
@@ -22,6 +22,7 @@ spring:
 
   
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: validate
 
@@ -48,3 +49,8 @@ logging:
 
 dsu:
   jar: C:/JAVA/Adm/dsu-benchmark-platform/services/orchestrator-service/groupmerger-1.0.jar
+  # Максимальная куча для каждого запускаемого JVM-процесса
+  # 512m — оптимально для Big Data обработки строк без OOM
+  xmx: 512m
+  # Ограничиваем параллельность до 1 для стабильности на одном ядре/памяти
+  max-concurrent: 1
